@@ -1,0 +1,500 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id                String   @id @default(cuid())
+  name              String
+  tradingName       String?
+  registrationNo    String?
+  taxNo             String?
+  sscNo             String?
+  nheNo             String?
+  address           String?
+  phone             String?
+  email             String?
+  website           String?
+  logoUrl           String?
+  status            TenantStatus @default(ACTIVE)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  users             User[]
+  employees         Employee[]
+  departments       Department[]
+  branches          Branch[]
+  payrollRuns       PayrollRun[]
+  leaveTypes        LeaveType[]
+  earningsCodes     EarningsCode[]
+  deductionCodes    DeductionCode[]
+  customFields      CustomField[]
+
+  @@map("tenants")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  tenantId      String
+  email         String    @unique
+  passwordHash  String
+  firstName     String
+  lastName      String
+  phone         String?
+  role          UserRole  @default(EMPLOYEE)
+  status        UserStatus @default(ACTIVE)
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee      Employee?
+
+  @@map("users")
+}
+
+model Employee {
+  id                  String    @id @default(cuid())
+  tenantId            String
+  employeeNo          String
+  firstName           String
+  lastName            String
+  email               String?
+  phone               String?
+  dateOfBirth         DateTime?
+  nationalId          String?
+  passportNo          String?
+  workPermitNo        String?
+  workPermitExpiry    DateTime?
+  driverLicenseNo     String?
+  driverLicenseExpiry DateTime?
+  gender              Gender?
+  maritalStatus       MaritalStatus?
+  startDate           DateTime
+  endDate             DateTime?
+  employmentType      EmploymentType @default(PERMANENT)
+  status              EmployeeStatus @default(ACTIVE)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  // Job Information
+  jobTitle            String?
+  grade               String?
+  step                String?
+  departmentId        String?
+  branchId            String?
+  costCenter          String?
+  reportsToId         String?
+
+  // Banking
+  bankName            String?
+  bankAccountNo       String?
+  bankBranchCode      String?
+  paymentMethod       PaymentMethod @default(EFT)
+
+  // Tax
+  taxNo               String?
+  payeTaxable         Boolean   @default(true)
+  payeExempt          Boolean   @default(false)
+  additionalRebate    Boolean   @default(false)
+  medicalAidCredit    Boolean   @default(false)
+
+  // Relations
+  tenant              Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId              String? @unique
+  user                User?   @relation(fields: [userId], references: [id])
+  department          Department? @relation(fields: [departmentId], references: [id])
+  branch              Branch?   @relation(fields: [branchId], references: [id])
+  reportsTo           Employee? @relation("EmployeeHierarchy", fields: [reportsToId], references: [id])
+  subordinates        Employee[] @relation("EmployeeHierarchy")
+  payrollEntries      PayrollEntry[]
+  leaveBalances       LeaveBalance[]
+  leaveRequests       LeaveRequest[]
+  staffLoans          StaffLoan[]
+  customFieldValues   CustomFieldValue[]
+
+  @@unique([tenantId, employeeNo])
+  @@map("employees")
+}
+
+model Department {
+  id          String   @id @default(cuid())
+  tenantId    String
+  name        String
+  description String?
+  parentId    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  parent      Department? @relation("DepartmentHierarchy", fields: [parentId], references: [id])
+  children    Department[] @relation("DepartmentHierarchy")
+  employees   Employee[]
+
+  @@unique([tenantId, name])
+  @@map("departments")
+}
+
+model Branch {
+  id          String   @id @default(cuid())
+  tenantId    String
+  name        String
+  code        String?
+  address     String?
+  phone       String?
+  email       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employees   Employee[]
+
+  @@unique([tenantId, name])
+  @@map("branches")
+}
+
+model PayrollRun {
+  id              String         @id @default(cuid())
+  tenantId        String
+  period          String
+  startDate       DateTime
+  endDate         DateTime
+  status          PayrollStatus  @default(DRAFT)
+  totalEmployees  Int            @default(0)
+  totalGrossPay   Decimal        @default(0)
+  totalNetPay     Decimal        @default(0)
+  totalPAYE       Decimal        @default(0)
+  totalSSC        Decimal        @default(0)
+  totalNHE        Decimal        @default(0)
+  processedAt     DateTime?
+  processedBy     String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  // Relations
+  tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  entries         PayrollEntry[]
+
+  @@unique([tenantId, period])
+  @@map("payroll_runs")
+}
+
+model PayrollEntry {
+  id              String   @id @default(cuid())
+  payrollRunId    String
+  employeeId      String
+  basicSalary     Decimal
+  overtimeEarnings Decimal @default(0)
+  otherEarnings   Decimal @default(0)
+  grossPay        Decimal
+  payeTax         Decimal @default(0)
+  sscEmployee     Decimal @default(0)
+  sscEmployer     Decimal @default(0)
+  nheEmployee     Decimal @default(0)
+  nheEmployer     Decimal @default(0)
+  otherDeductions Decimal @default(0)
+  netPay          Decimal
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  payrollRun      PayrollRun @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
+  employee        Employee   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  entryDetails    PayrollEntryDetail[]
+
+  @@unique([payrollRunId, employeeId])
+  @@map("payroll_entries")
+}
+
+model PayrollEntryDetail {
+  id             String           @id @default(cuid())
+  payrollEntryId String
+  code           String
+  type           DetailType
+  amount         Decimal
+  description    String?
+  createdAt      DateTime         @default(now())
+
+  // Relations
+  payrollEntry   PayrollEntry     @relation(fields: [payrollEntryId], references: [id], onDelete: Cascade)
+
+  @@map("payroll_entry_details")
+}
+
+model LeaveType {
+  id                String     @id @default(cuid())
+  tenantId          String
+  name              String
+  code              String
+  unit              LeaveUnit  @default(DAYS)
+  accrualRate       Decimal?
+  maxAccrual        Decimal?
+  carryForwardLimit Decimal?
+  requiresDocument Boolean   @default(false)
+  paidLeave         Boolean   @default(true)
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  // Relations
+  tenant            Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  leaveBalances     LeaveBalance[]
+  leaveRequests     LeaveRequest[]
+
+  @@unique([tenantId, code])
+  @@map("leave_types")
+}
+
+model LeaveBalance {
+  id          String   @id @default(cuid())
+  employeeId  String
+  leaveTypeId String
+  balance     Decimal @default(0)
+  pending     Decimal @default(0)
+  year        Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType   LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, leaveTypeId, year])
+  @@map("leave_balances")
+}
+
+model LeaveRequest {
+  id          String        @id @default(cuid())
+  employeeId  String
+  leaveTypeId String
+  startDate   DateTime
+  endDate     DateTime
+  days        Decimal
+  reason      String?
+  status      LeaveStatus   @default(PENDING)
+  approvedBy  String?
+  approvedAt  DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  // Relations
+  employee    Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType   LeaveType     @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
+
+  @@map("leave_requests")
+}
+
+model StaffLoan {
+  id              String         @id @default(cuid())
+  employeeId      String
+  amount          Decimal
+  interestRate    Decimal?
+  repaymentPeriod Int?
+  monthlyPayment  Decimal?
+  balance         Decimal
+  status          LoanStatus     @default(ACTIVE)
+  startDate       DateTime
+  endDate         DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  // Relations
+  employee        Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@map("staff_loans")
+}
+
+model EarningsCode {
+  id          String   @id @default(cuid())
+  tenantId    String
+  code        String
+  name        String
+  description String?
+  taxable     Boolean  @default(true)
+  sscApplicable Boolean @default(true)
+  nheApplicable Boolean @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, code])
+  @@map("earnings_codes")
+}
+
+model DeductionCode {
+  id          String           @id @default(cuid())
+  tenantId    String
+  code        String
+  name        String
+  description String?
+  type        DeductionType
+  preTax      Boolean          @default(false)
+  sscApplicable Boolean        @default(false)
+  nheApplicable Boolean        @default(false)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  // Relations
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, code])
+  @@map("deduction_codes")
+}
+
+model CustomField {
+  id          String        @id @default(cuid())
+  tenantId    String
+  name        String
+  label       String
+  type        CustomFieldType
+  required    Boolean       @default(false)
+  options     String?       // JSON string for dropdown options
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  // Relations
+  tenant      Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  values      CustomFieldValue[]
+
+  @@unique([tenantId, name])
+  @@map("custom_fields")
+}
+
+model CustomFieldValue {
+  id            String   @id @default(cuid())
+  customFieldId String
+  employeeId    String
+  value         String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  customField   CustomField @relation(fields: [customFieldId], references: [id], onDelete: Cascade)
+  employee      Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([customFieldId, employeeId])
+  @@map("custom_field_values")
+}
+
+// Enums
+enum TenantStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  PAYROLL_ADMIN
+  HR_MANAGER
+  MANAGER
+  EMPLOYEE
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum MaritalStatus {
+  SINGLE
+  MARRIED
+  DIVORCED
+  WIDOWED
+}
+
+enum EmploymentType {
+  PERMANENT
+  CONTRACT
+  TEMPORARY
+  PROBATION
+  INTERN
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  INACTIVE
+  TERMINATED
+  SUSPENDED
+  ON_LEAVE
+}
+
+enum PaymentMethod {
+  CASH
+  EFT
+  CHEQUE
+  MOBILE_MONEY
+}
+
+enum PayrollStatus {
+  DRAFT
+  CALCULATING
+  REVIEW
+  APPROVED
+  PROCESSING
+  COMPLETED
+  CANCELLED
+}
+
+enum DetailType {
+  EARNING
+  DEDUCTION
+  CONTRIBUTION
+}
+
+enum LeaveUnit {
+  DAYS
+  HOURS
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum LoanStatus {
+  ACTIVE
+  PAID
+  DEFAULTED
+  SUSPENDED
+}
+
+enum DeductionType {
+  STATUTORY
+  VOLUNTARY
+  LOAN
+  GARNISHEE
+  UNION
+}
+
+enum CustomFieldType {
+  TEXT
+  NUMBER
+  DATE
+  DROPDOWN
+  CHECKBOX
+  FILE
+}
