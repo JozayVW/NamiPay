@@ -60,7 +60,7 @@ export default function RegisterPage() {
       }
       localStorage.setItem('namipay_token', data.token)
       localStorage.setItem('namipay_user', JSON.stringify(data.user))
-      document.cookie = \"namipay_token=\" + data.token + \"; path=/; max-age=604800; SameSite=Lax\"
+      document.cookie = 'namipay_token=' + data.token + '; path=/; max-age=604800; SameSite=Lax'
       router.push('/dashboard')
     } catch {
       setError('Network error. Please try again.')
